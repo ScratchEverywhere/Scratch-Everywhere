@@ -54,6 +54,10 @@ LIBS     += $(shell arm-vita-eabi-pkg-config --libs sdl2)
 LIBS     += $(shell arm-vita-eabi-pkg-config --libs SDL2_image)
 LIBS     += $(shell arm-vita-eabi-pkg-config --libs SDL2_ttf)
 
+# Curl Libs
+LIBS	+= -lSceSysmodule_stub -lSceNet_stub -lSceNetCtl_stub -lSceHttp_stub -lSceSsl_stub
+LIBS	+= $(shell arm-vita-eabi-pkg-config --libs libcurl)
+
 # Feature flags
 ifeq ($(ENABLE_AUDIO),1)
 LIBS     += $(shell arm-vita-eabi-pkg-config --libs SDL2_mixer)

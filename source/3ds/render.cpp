@@ -13,12 +13,10 @@
 #include <SDL2/SDL_mixer.h>
 #endif
 
-#ifdef ENABLE_CLOUDVARS
 #include <malloc.h>
 
 #define SOC_ALIGN 0x1000
 #define SOC_BUFFERSIZE 0x100000
-#endif
 
 #define SCREEN_WIDTH 400
 #define BOTTOM_SCREEN_WIDTH 320
@@ -41,9 +39,7 @@ bool Render::hasFrameBegan;
 static int currentScreen = 0;
 std::vector<Monitor> Render::visibleVariables;
 
-#ifdef ENABLE_CLOUDVARS
 static uint32_t *SOC_buffer = NULL;
-#endif
 
 bool Render::Init() {
     gfxInitDefault();
@@ -64,7 +60,6 @@ bool Render::Init() {
     topScreenRightEye = C2D_CreateScreenTarget(GFX_TOP, GFX_RIGHT);
     bottomScreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-#ifdef ENABLE_CLOUDVARS
     int ret;
 
     SOC_buffer = (uint32_t *)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
@@ -75,7 +70,6 @@ bool Render::Init() {
         err << "socInit: 0x" << std::hex << std::setw(8) << std::setfill('0') << ret;
         Log::logError(err.str());
     }
-#endif
 
     romfsInit();
 #ifdef ENABLE_AUDIO
@@ -497,9 +491,7 @@ void Render::renderVisibleVariables() {
 }
 
 void Render::deInit() {
-#ifdef ENABLE_CLOUDVARS
     socExit();
-#endif
 
     Image::cleanupImages();
     SoundPlayer::cleanupAudio();

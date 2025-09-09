@@ -40,6 +40,10 @@ char nickname[0x21];
 #endif
 
 #ifdef VITA
+#include <psp2/net/http.h>
+#include <psp2/net/net.h>
+#include <psp2/net/netctl.h>
+#include <psp2/sysmodule.h>
 #include <psp2/touch.h>
 #endif
 
@@ -128,6 +132,8 @@ bool Render::Init() {
     accountProfileClose(&profile);
     accountExit();
 postAccount:
+
+    socketInitializeDefault();
 #elif defined(__OGC__)
     SYS_STDIO_Report(true);
 
@@ -143,6 +149,17 @@ postAccount:
 
     windowWidth = 960;
     windowHeight = 544;
+
+    // Networking, taken from https://github.com/vitasdk/samples/blob/2ec8ca811b782ddc472d0f18d93c929030df4520/net_libcurl/src/main.cpp#L132
+    sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
+    SceNetInitParam netInitParam;
+    netInitParam.memory = malloc(4194304); // 4MiB
+    netInitParam.size = 4194304;           // 4MiB
+    netInitParam.flags = 0;
+    sceNetInit(&netInitParam);
+
+    sceSysmoduleLoadModule(SCE_SYSMODULE_HTTP);
+    sceHttpInit(4194304); // 4MiB
 #endif
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS);
     IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
@@ -182,6 +199,15 @@ void Render::deInit() {
 #ifdef __WIIU__
     WHBUnmountSdCard();
     nn::act::Finalize();
+#elif defined(VITA)
+    sceNetCtlTerm();
+    sceNetTerm();
+    sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);
+
+    sceHttpTerm();
+    sceSysmoduleUnloadModule(SCE_SYSMODULE_HTTP);
+#elif defined(__SWITCH__)
+    socketExit();
 #endif
 }
 

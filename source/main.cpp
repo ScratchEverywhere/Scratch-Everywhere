@@ -3,6 +3,10 @@
 #include "scratch/render.hpp"
 #include "scratch/unzip.hpp"
 
+#ifndef ENABLE_CLOUVARS
+#include <curl/curl.h>
+#endif
+
 #ifdef __SWITCH__
 #include <switch.h>
 #endif
@@ -13,9 +17,17 @@
 
 static void exitApp() {
     Render::deInit();
+
+#ifndef ENABLE_CLOUVARS
+    curl_global_cleanup();
+#endif
 }
 
 static bool initApp() {
+#ifndef ENABLE_CLOUVARS
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
+
     return Render::Init();
 }
 

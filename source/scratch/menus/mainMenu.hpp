@@ -3,6 +3,12 @@
 #include "../text.hpp"
 #include "menuObjects.hpp"
 
+#ifdef __3DS__
+#include <sys/select.h>
+#endif
+
+#include <curl/curl.h>
+
 class Menu {
   public:
     bool isInitialized = false;
@@ -55,11 +61,13 @@ class ProjectMenu : public Menu {
     bool hasProjects;
     bool shouldGoBack = false;
     std::vector<ButtonObject *> projects;
+    std::vector<std::string> projectFiles;
 
     ControlObject *projectControl = nullptr;
     ButtonObject *backButton = nullptr;
     ButtonObject *playButton = nullptr;
     ButtonObject *settingsButton = nullptr;
+    ButtonObject *downloadButton = nullptr;
     ButtonObject *noProjectsButton = nullptr;
     TextObject *noProjectInfo = nullptr;
     TextObject *noProjectsText = nullptr;
@@ -113,5 +121,35 @@ class ControlsMenu : public Menu {
     void init() override;
     void render() override;
     void applyControls();
+    void cleanup() override;
+};
+
+class DownloadMenu : public Menu {
+  public:
+    DownloadMenu();
+    ~DownloadMenu();
+
+    /* enum ProjectSource {
+        SCRATCHBOX,
+        SCRATCH
+    }; */
+
+    std::string projectId;
+    // ProjectSource projectSource = SCRATCHBOX;
+
+    ButtonObject *input = nullptr;
+    // ButtonObject *selectScratchBox = nullptr;
+    // ButtonObject *selectScratch = nullptr;
+    ButtonObject *downloadButton = nullptr;
+    ButtonObject *backButton = nullptr;
+
+    CURL *curl;
+
+    void downloadFile(const std::string &url, const std::string &out);
+    // void downloadScratchBox();
+    // void downloadScratch();
+
+    void init() override;
+    void render() override;
     void cleanup() override;
 };

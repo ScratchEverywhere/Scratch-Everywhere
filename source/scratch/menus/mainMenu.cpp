@@ -3,8 +3,13 @@
 #include "../image.hpp"
 #include "../input.hpp"
 #include "../interpret.hpp"
+#include "../keyboard.hpp"
 #include "../render.hpp"
 #include "../unzip.hpp"
+#include "menuObjects.hpp"
+#include <algorithm>
+#include <fstream>
+#include <ios>
 #include <nlohmann/json.hpp>
 #ifdef __WIIU__
 #include <whb/sdcard.h>
@@ -184,13 +189,23 @@ void ProjectMenu::init() {
     backButton->needsToBeSelected = false;
     backButton->scale = 1.0;
 
-    std::vector<std::string> projectFiles;
     projectFiles = Unzip::getProjectFiles(OS::getScratchFolderLocation());
 
     // initialize text and set positions
     int yPosition = 120;
     for (std::string &file : projectFiles) {
-        ButtonObject *project = new ButtonObject(file.substr(0, file.length() - 4), "gfx/menu/projectBox.png", 0, yPosition, "gfx/menu/Ubuntu-Bold");
+        std::string projectName = file.substr(0, file.length() - 4);
+        std::ifstream projectInfoFile(OS::getScratchFolderLocation() + projectName + ".json");
+        if (projectInfoFile.good()) {
+            try {
+                nlohmann::json projectInfo = nlohmann::json::parse(projectInfoFile);
+                projectName = projectInfo["name"].get<std::string>();
+            } catch (const nlohmann::json::parse_error &e) {
+                Log::logError("JSON parse error: " + std::string(e.what()));
+            }
+        }
+
+        ButtonObject *project = new ButtonObject(projectName, "gfx/menu/projectBox.png", 0, yPosition, "gfx/menu/Ubuntu-Bold");
         project->text->setColor(Math::color(0, 0, 0, 255));
         project->canBeClicked = false;
         project->y -= project->text->getSize()[1] / 2;
@@ -253,10 +268,13 @@ void ProjectMenu::init() {
         hasProjects = true;
         playButton = new ButtonObject("Play (A)", "gfx/menu/optionBox.svg", 95, 230, "gfx/menu/Ubuntu-Bold");
         settingsButton = new ButtonObject("Settings (L)", "gfx/menu/optionBox.svg", 315, 230, "gfx/menu/Ubuntu-Bold");
+        downloadButton = new ButtonObject("Download (Start)", "gfx/menu/optionBox.svg", 95, 10, "gfx/menu/Ubuntu-Bold");
         playButton->scale = 0.6;
         settingsButton->scale = 0.6;
+        downloadButton->scale = 0.6;
         settingsButton->needsToBeSelected = false;
         playButton->needsToBeSelected = false;
+        downloadButton->needsToBeSelected = false;
     }
     isInitialized = true;
 }
@@ -270,13 +288,14 @@ void ProjectMenu::render() {
 
     if (hasProjects) {
         if (projectControl->selectedObject->isPressed({"a"}) || playButton->isPressed({"a"})) {
-            Unzip::filePath = projectControl->selectedObject->text->getText() + ".sb3";
+            auto it = std::find(projects.begin(), projects.end(), projectControl->selectedObject);
+            Unzip::filePath = projectFiles[it - projects.begin()];
             MenuManager::loadProject();
             return;
         }
         if (settingsButton->isPressed({"l"})) {
-            std::string selectedProject = projectControl->selectedObject->text->getText();
-            ProjectSettings *settings = new ProjectSettings(selectedProject);
+            auto it = std::find(projects.begin(), projects.end(), projectControl->selectedObject);
+            ProjectSettings *settings = new ProjectSettings(projectFiles[it - projects.begin()]);
             MenuManager::changeMenu(settings);
             return;
         }
@@ -287,6 +306,12 @@ void ProjectMenu::render() {
             MenuManager::changeMenu(MenuManager::previousMenu);
             return;
         }
+    }
+
+    if (downloadButton->isPressed({"1"})) {
+        DownloadMenu *download = new DownloadMenu();
+        MenuManager::changeMenu(download);
+        return;
     }
 
     if (backButton->isPressed({"b", "y"})) {
@@ -339,6 +364,7 @@ void ProjectMenu::render() {
         noProjectInfo->render(Render::getWidth() / 2, Render::getHeight() * 0.85);
         projectControl->render();
     }
+    downloadButton->render();
     backButton->render();
     Render::endFrame();
 }
@@ -480,7 +506,7 @@ ControlsMenu::~ControlsMenu() {
 
 void ControlsMenu::init() {
 
-    Unzip::filePath = projectPath + ".sb3";
+    Unzip::filePath = projectPath;
     if (!Unzip::load()) {
         Log::logError("Failed to load project for ControlsMenu.");
         toExit = true;
@@ -691,7 +717,7 @@ void ControlsMenu::render() {
 void ControlsMenu::applyControls() {
     // Build the file path
     std::string folderPath = OS::getScratchFolderLocation() + projectPath;
-    std::string filePath = folderPath + ".sb3" + ".json";
+    std::string filePath = folderPath + ".json";
 
     // Make sure parent directories exist
     try {
@@ -743,5 +769,138 @@ void ControlsMenu::cleanup() {
     // Render::beginFrame(1, 181, 165, 111);
     // Input::getInput();
     // Render::endFrame();
+    isInitialized = false;
+}
+
+DownloadMenu::DownloadMenu() {
+    init();
+}
+
+DownloadMenu::~DownloadMenu() {
+    cleanup();
+}
+
+void DownloadMenu::init() {
+    curl = curl_easy_init();
+    if (!curl) {
+        Log::logError("Failed to initialize curl, returning to previous menu.");
+        MenuManager::changeMenu(MenuManager::previousMenu);
+        return;
+    }
+#if defined(__WIIU__) || defined(__3DS__) || defined(VITA)
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+#endif
+
+    input = new ButtonObject("Project ID (A)", "gfx/menu/optionBox.svg", 200, 80, "gfx/menu/Ubuntu-Bold");
+    // selectScratchBox = new ButtonObject("ScratchBox [x]", "gfx/menu/projectBox.png", 100, 125, "gfx/menu/Ubuntu-Bold");
+    // selectScratch = new ButtonObject("Scratch [ ]", "gfx/menu/projectBox.png", 300, 125, "gfx/menu/Ubuntu-Bold");
+    downloadButton = new ButtonObject("Download (Start)", "gfx/menu/projectBox.png", 200, 170, "gfx/menu/Ubuntu-Bold");
+    backButton = new ButtonObject("", "gfx/menu/buttonBack.png", 375, 20, "gfx/menu/Ubuntu-Bold");
+
+    input->needsToBeSelected = false;
+    // selectScratchBox->needsToBeSelected = false;
+    // selectScratch->needsToBeSelected = false;
+    downloadButton->needsToBeSelected = false;
+    backButton->needsToBeSelected = false;
+
+    // selectScratchBox->scale = 0.75;
+    // selectScratch->scale = 0.75;
+    // downloadButton->scale = 0.75;
+
+    // selectScratchBox->text->setColor(Math::color(0, 0, 0, 255));
+    // selectScratch->text->setColor(Math::color(0, 0, 0, 255));
+    downloadButton->text->setColor(Math::color(0, 0, 0, 255));
+
+    Render::renderMode = Render::BOTH_SCREENS;
+
+    isInitialized = true;
+}
+
+void DownloadMenu::render() {
+    Input::getInput();
+
+    if (input->isPressed({"a"})) {
+        Keyboard kbd;
+        projectId = kbd.openKeyboard("Enter a project Id");
+    }
+
+    /* if (selectScratchBox->isPressed({"left arrow"})) {
+        selectScratchBox->text->setText("ScratchBox [x]");
+        selectScratch->text->setText("Scratch [ ]");
+        projectSource = SCRATCHBOX;
+    } else if (selectScratch->isPressed({"right arrow"})) {
+        selectScratchBox->text->setText("ScratchBox [ ]");
+        selectScratch->text->setText("Scratch [x]");
+        projectSource = SCRATCH;
+    } */
+
+    if (downloadButton->isPressed({"1"})) {
+        downloadFile("https://scratchbox.grady.link/api/project/" + projectId, projectId + ".json");
+        downloadFile("https://scratchbox.grady.link/api/project/" + projectId + "/download", projectId + ".sb3");
+        ProjectMenu *projectMenu = new ProjectMenu();
+        MenuManager::changeMenu(projectMenu);
+        return;
+    }
+
+    if (backButton->isPressed({"b", "y"})) {
+        MenuManager::changeMenu(MenuManager::previousMenu);
+        return;
+    }
+
+    Render::beginFrame(0, 181, 165, 111);
+    Render::beginFrame(1, 181, 165, 111);
+
+    input->render();
+    // selectScratchBox->render();
+    // selectScratch->render();
+    downloadButton->render();
+    backButton->render();
+
+    Render::endFrame();
+}
+
+void DownloadMenu::downloadFile(const std::string &url, const std::string &out) {
+    FILE *file = fopen((OS::getScratchFolderLocation() + out).c_str(), "wb");
+    if (!file) {
+        Log::logError("Could not open file for downloading.");
+        return;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, NULL);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        Log::logError("Download failed: " + std::string(curl_easy_strerror(res)));
+    }
+
+    fclose(file);
+}
+
+void DownloadMenu::cleanup() {
+    if (input != nullptr) {
+        delete input;
+        input = nullptr;
+    }
+    /* if (selectScratchBox != nullptr) {
+        delete selectScratchBox;
+        selectScratchBox = nullptr;
+    }
+    if (selectScratch != nullptr) {
+        delete selectScratch;
+        selectScratch = nullptr;
+    } */
+    if (downloadButton != nullptr) {
+        delete downloadButton;
+        downloadButton = nullptr;
+    }
+
+    curl_easy_cleanup(curl);
+
     isInitialized = false;
 }

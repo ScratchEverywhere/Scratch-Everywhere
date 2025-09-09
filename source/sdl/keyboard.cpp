@@ -6,14 +6,33 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#elif defined(__WIIU__)
+#include <SDL2/SDL_syswm.h>
+
+extern "C" {
+/**
+ *  The custom event structure.
+ */
+struct Custom_SysWMmsg {
+    SDL_version version;
+    SDL_SYSWM_TYPE subsystem;
+    struct {
+        unsigned event;
+    } wiiu;
+};
+}
 #endif
 
 /**
  * Uses SDL2 text input.
  */
 std::string Keyboard::openKeyboard(const char *hintText) {
-#if defined(__WIIU__) || defined(__OGC__)
-// doesn't work on these platforms....
+#ifdef __WIIU__
+    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+#endif
+
+#ifdef __OGC__
+// doesn't work on GameCube....
 #else
     TextObject *text = createTextObject(std::string(hintText), 0, 0);
     text->setCenterAligned(true);
@@ -36,11 +55,22 @@ std::string Keyboard::openKeyboard(const char *hintText) {
     while (inputActive) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
+#ifdef __WIIU__
+            case SDL_SYSWMEVENT:
+                if (event.syswm.msg->subsystem == SDL_SYSWM_WIIU && (reinterpret_cast<Custom_SysWMmsg *>(event.syswm.msg)->wiiu.event == SDL_WIIU_SYSWM_SWKBD_OK_FINISH_EVENT || reinterpret_cast<Custom_SysWMmsg *>(event.syswm.msg)->wiiu.event == SDL_WIIU_SYSWM_SWKBD_CANCEL_EVENT)) {
+                    inputActive = false;
+                }
+                break;
+#endif
             case SDL_TEXTINPUT:
                 // Add text
                 inputText += event.text.text;
                 text->setText(inputText);
                 text->setColor(Math::color(0, 0, 0, 255));
+
+#ifdef __SWITCH__
+                inputActive = false;
+#endif
 
                 break;
 

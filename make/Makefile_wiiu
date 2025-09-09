@@ -42,7 +42,7 @@ CFLAGS	:=	-g -Wall -O2 -Wno-format-truncation -ffunction-sections -ffast-math $(
 export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) $(foreach dir,$(LIBDIRS),-I$(dir)/include) -I$(CURDIR)/$(BUILD)
 
 CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSDL_BUILD
-CFLAGS	+=	`$(PKGCONF_WIIU) --cflags SDL2_image SDL2_ttf SDL2_mixer sdl2`
+CFLAGS	+=	$(shell $(PKGCONF_WIIU) --cflags SDL2_image SDL2_ttf SDL2_mixer sdl2)
 CFLAGS	+=	-I$(DEVKITPRO)/wut/include
 
 ASFLAGS	:=	-g $(MACHDEP)
@@ -50,16 +50,18 @@ LDFLAGS	:=	-g $(MACHDEP) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
 
 ifeq ($(ENABLE_AUDIO),1)
 CFLAGS	+=	-DENABLE_AUDIO
-LIBS	:=	`$(PKGCONF_WIIU) --libs SDL2_image SDL2_ttf SDL2_mixer sdl2` `$(PKGCONF) --libs zlib libpng`
+LIBS	:=	$(shell $(PKGCONF_WIIU) --libs SDL2_image SDL2_ttf SDL2_mixer sdl2) $(shell $(PKGCONF) --libs zlib libpng)
 else
-LIBS	:=	`$(PKGCONF_WIIU) --libs SDL2_image SDL2_ttf sdl2` `$(PKGCONF) --libs zlib libpng`
+LIBS	:=	$(shell $(PKGCONF_WIIU) --libs SDL2_image SDL2_ttf sdl2) $(shell $(PKGCONF) --libs zlib libpng)
 endif
 
 LIBS	+=	-lharfbuzz -lfreetype
 
+LIBS	+=	$(shell $(PKGCONF_WIIU) --libs libcurl)
+
 ifeq ($(ENABLE_CLOUDVARS),1)
-CFLAGS	+=	-DENABLE_CLOUDVARS `$(PKGCONF_WIIU) --cflags mist++`
-LIBS		+=	`$(PKGCONF_WIIU) --libs mist++`
+CFLAGS	+=	-DENABLE_CLOUDVARS $(shell $(PKGCONF_WIIU) --cflags mist++)
+LIBS		+=	$(shell $(PKGCONF_WIIU) --libs mist++)
 
 # Mist++ Version Check
 ifeq ($(shell $(PKGCONF_WIIU) --atleast-version=0.2.0 mist++ >/dev/null 2>&1; echo $$?),1)
